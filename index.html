@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Row Consolidator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3346;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --accent-glow: rgba(108, 92, 231, 0.25);
+    --text: #e8e6f0;
+    --text-dim: #8b8a9e;
+    --success: #00b894;
+    --success-glow: rgba(0, 184, 148, 0.2);
+    --warn: #fdcb6e;
+    --danger: #e17055;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(108,92,231,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108,92,231,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 960px; margin: 0 auto; padding: 40px 24px;
+  }
+
+  header {
+    text-align: center; margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-size: 2rem; font-weight: 700; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent-light), var(--accent), #fd79a8);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  header p { color: var(--text-dim); font-size: 0.95rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    transition: border-color 0.3s;
+  }
+
+  .card:hover { border-color: var(--accent); }
+
+  .card h2 {
+    font-size: 1.05rem; font-weight: 600; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .step-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--accent); color: #fff;
+    font-size: 0.8rem; font-weight: 700; flex-shrink: 0;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .dropzone.loaded {
+    border-color: var(--success);
+    background: var(--success-glow);
+  }
+
+  .dropzone input { display: none; }
+
+  .dropzone .icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .dropzone .label { font-weight: 500; margin-bottom: 4px; }
+  .dropzone .sub { color: var(--text-dim); font-size: 0.85rem; }
+
+  .file-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--success);
+    margin-top: 8px;
+  }
+
+  /* Config */
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .field label {
+    display: block; font-size: 0.85rem; font-weight: 500;
+    color: var(--text-dim); margin-bottom: 6px;
+  }
+
+  .field select, .field input {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field select:focus, .field input:focus {
+    border-color: var(--accent);
+  }
+
+  .field select option { background: var(--surface2); }
+
+  .field-full { grid-column: 1 / -1; }
+
+  .help { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+
+  /* Checkbox group */
+  .checkbox-group {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+  }
+
+  .checkbox-group label {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text);
+  }
+
+  .checkbox-group label:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .checkbox-group input { display: none; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px;
+    border: none; border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #8b7cf7);
+    color: #fff;
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(108, 92, 231, 0.4);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4; cursor: not-allowed; transform: none;
+    box-shadow: none;
+  }
+
+  .btn-export {
+    background: linear-gradient(135deg, var(--success), #00d2a0);
+    color: #fff;
+    box-shadow: 0 4px 20px var(--success-glow);
+  }
+
+  .btn-export:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(0, 184, 148, 0.4);
+  }
+
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+
+  /* Preview */
+  .preview-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    margin-top: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  thead th {
+    position: sticky; top: 0;
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--accent-light);
+    border-bottom: 2px solid var(--accent);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    max-width: 500px;
+  }
+
+  tbody tr:hover { background: rgba(108, 92, 231, 0.06); }
+
+  .stats {
+    display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+
+  .stat {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 14px 20px;
+    min-width: 140px;
+  }
+
+  .stat .num {
+    font-size: 1.6rem; font-weight: 700;
+    color: var(--accent-light);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .stat .lbl { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+
+  .hidden { display: none; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--success); color: #fff;
+    padding: 14px 24px; border-radius: 10px;
+    font-weight: 600; font-size: 0.9rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    transform: translateY(100px); opacity: 0;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  @media (max-width: 600px) {
+    .config-grid { grid-template-columns: 1fr; }
+    .container { padding: 20px 16px; }
+    header h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="container">
+  <header>
+    <h1>Excel Row Consolidator</h1>
+    <p>Upload an Excel file, pick your columns, and consolidate duplicate rows into single lines.</p>
+  </header>
+
+  <!-- Step 1: Upload -->
+  <div class="card">
+    <h2><span class="step-badge">1</span> Upload Your File</h2>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      <div class="icon">📁</div>
+      <div class="label">Drop your Excel or CSV file here</div>
+      <div class="sub">or click to browse</div>
+      <div class="file-info hidden" id="fileInfo"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Configure -->
+  <div class="card hidden" id="configCard">
+    <h2><span class="step-badge">2</span> Configure Consolidation</h2>
+    <div class="config-grid">
+      <div class="field">
+        <label>Group By (Name / Key Column)</label>
+        <select id="groupCol"></select>
+        <div class="help">Rows with the same value here will be merged into one line</div>
+      </div>
+      <div class="field">
+        <label>Combine Values From</label>
+        <select id="combineCol"></select>
+        <div class="help">Values from this column will be joined together</div>
+      </div>
+      <div class="field">
+        <label>Separator</label>
+        <select id="separator">
+          <option value="; " selected>Semicolon ( ; )</option>
+          <option value=", ">Comma ( , )</option>
+          <option value=" | ">Pipe ( | )</option>
+          <option value="&#10;">New line</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Filter Column (optional)</label>
+        <select id="filterCol">
+          <option value="">— No filter —</option>
+        </select>
+        <div class="help">Only include rows where this column matches a value</div>
+      </div>
+      <div class="field hidden" id="filterValueField">
+        <label>Filter Value</label>
+        <select id="filterValue"></select>
+      </div>
+      <div class="field">
+        <label>Strip Prefix (optional)</label>
+        <input type="text" id="stripPrefix" placeholder="e.g. Housing Accommodation/">
+        <div class="help">Remove this text from the start of combined values</div>
+      </div>
+      <div class="field field-full">
+        <label>Additional Columns to Keep</label>
+        <div class="checkbox-group" id="keepCols"></div>
+        <div class="help">These will take the first value found per group</div>
+      </div>
+    </div>
+    <div class="actions" style="margin-top: 24px;">
+      <button class="btn btn-primary" id="runBtn">Consolidate Rows</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Results -->
+  <div class="card hidden" id="resultsCard">
+    <h2><span class="step-badge">3</span> Results</h2>
+    <div class="stats" id="stats"></div>
+    <div class="actions">
+      <button class="btn btn-export" id="exportBtn">Download Excel</button>
+    </div>
+    <div class="preview-wrap">
+      <table>
+        <thead id="previewHead"></thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let rawData = [], headers = [], resultData = [], resultHeaders = [];
+
+// File upload
+const dropzone = $('dropzone');
+const fileInput = $('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    if (!json.length) return showToast('File appears empty!', true);
+
+    headers = Object.keys(json[0]);
+    rawData = json;
+
+    dropzone.classList.add('loaded');
+    $('fileInfo').textContent = `✓ ${file.name} — ${rawData.length.toLocaleString()} rows, ${headers.length} columns`;
+    $('fileInfo').classList.remove('hidden');
+
+    populateConfig();
+    $('configCard').classList.remove('hidden');
+    $('resultsCard').classList.add('hidden');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function populateConfig() {
+  const makeopts = (sel, cols, extra) => {
+    sel.innerHTML = (extra || '') + cols.map(c => `<option value="${c}">${c}</option>`).join('');
+  };
+  makeopts($('groupCol'), headers);
+  makeopts($('combineCol'), headers);
+  makeopts($('filterCol'), headers, '<option value="">— No filter —</option>');
+
+  // Auto-select: if col A looks like names/IDs, use it; combine = col C-ish
+  if (headers.length >= 3) {
+    $('groupCol').value = headers[0];
+    $('combineCol').value = headers[2];
+  }
+
+  // Keep-cols checkboxes
+  $('keepCols').innerHTML = headers.map(h =>
+    `<label><input type="checkbox" value="${h}" checked> ${h}</label>`
+  ).join('');
+
+  // Uncheck group and combine cols by default (they're already included)
+  updateKeepCols();
+}
+
+function updateKeepCols() {
+  const g = $('groupCol').value, c = $('combineCol').value;
+  $('keepCols').querySelectorAll('input').forEach(inp => {
+    const par = inp.parentElement;
+    if (inp.value === g || inp.value === c) {
+      inp.checked = false; par.style.opacity = '0.4'; inp.disabled = true;
+    } else {
+      par.style.opacity = '1'; inp.disabled = false;
+    }
+  });
+}
+
+$('groupCol').addEventListener('change', updateKeepCols);
+$('combineCol').addEventListener('change', updateKeepCols);
+
+$('filterCol').addEventListener('change', () => {
+  const col = $('filterCol').value;
+  if (!col) { $('filterValueField').classList.add('hidden'); return; }
+  const unique = [...new Set(rawData.map(r => r[col]))].sort();
+  $('filterValue').innerHTML = unique.map(v => `<option value="${v}">${v}</option>`).join('');
+  $('filterValueField').classList.remove('hidden');
+});
+
+// Run consolidation
+$('runBtn').addEventListener('click', () => {
+  const groupCol = $('groupCol').value;
+  const combineCol = $('combineCol').value;
+  const sep = $('separator').value;
+  const filterCol = $('filterCol').value;
+  const filterVal = $('filterValue').value;
+  const stripPfx = $('stripPrefix').value;
+
+  const keepCols = [...$('keepCols').querySelectorAll('input:checked:not(:disabled)')].map(i => i.value);
+
+  // Filter
+  let data = rawData;
+  if (filterCol) data = data.filter(r => String(r[filterCol]) === filterVal);
+
+  // Track original appearance order
+  const orderMap = new Map();
+  let idx = 0;
+  data.forEach(r => {
+    const key = String(r[groupCol]);
+    if (!orderMap.has(key)) orderMap.set(key, idx++);
+  });
+
+  // Group
+  const groups = new Map();
+  data.forEach(r => {
+    const key = String(r[groupCol]);
+    if (!groups.has(key)) groups.set(key, { first: r, values: [] });
+    let val = String(r[combineCol]);
+    if (stripPfx && val.startsWith(stripPfx)) val = val.slice(stripPfx.length);
+    groups.get(key).values.push(val);
+  });
+
+  // Build results in original order
+  resultHeaders = [groupCol, ...keepCols, combineCol + ' (Combined)'];
+  resultData = [];
+
+  const sorted = [...groups.entries()].sort((a, b) => orderMap.get(a[0]) - orderMap.get(b[0]));
+
+  sorted.forEach(([key, { first, values }]) => {
+    const unique = [...new Map(values.map(v => [v, v])).values()]; // dedupe, preserve order
+    const row = { [groupCol]: key };
+    keepCols.forEach(c => row[c] = first[c]);
+    row[combineCol + ' (Combined)'] = unique.join(sep);
+    resultData.push(row);
+  });
+
+  // Stats
+  $('stats').innerHTML = `
+    <div class="stat"><div class="num">${data.length.toLocaleString()}</div><div class="lbl">Rows processed</div></div>
+    <div class="stat"><div class="num">${resultData.length.toLocaleString()}</div><div class="lbl">Unique entries</div></div>
+    <div class="stat"><div class="num">${(((data.length - resultData.length) / data.length) * 100).toFixed(0)}%</div><div class="lbl">Reduction</div></div>
+  `;
+
+  // Preview (first 50)
+  $('previewHead').innerHTML = '<tr>' + resultHeaders.map(h => `<th>${h}</th>`).join('') + '</tr>';
+  $('previewBody').innerHTML = resultData.slice(0, 50).map(r =>
+    '<tr>' + resultHeaders.map(h => `<td>${r[h] ?? ''}</td>`).join('') + '</tr>'
+  ).join('');
+
+  $('resultsCard').classList.remove('hidden');
+  $('resultsCard').scrollIntoView({ behavior: 'smooth' });
+  showToast(`Consolidated ${data.length.toLocaleString()} rows → ${resultData.length.toLocaleString()} entries`);
+});
+
+// Export
+$('exportBtn').addEventListener('click', () => {
+  const ws = XLSX.utils.json_to_sheet(resultData, { header: resultHeaders });
+
+  // Auto-width columns
+  const colWidths = resultHeaders.map((h, i) => {
+    let max = h.length;
+    resultData.forEach(r => {
+      const val = String(r[h] || '');
+      max = Math.max(max, Math.min(val.length, 100));
+    });
+    return { wch: max + 4 };
+  });
+  ws['!cols'] = colWidths;
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Consolidated');
+  XLSX.writeFile(wb, 'Consolidated_Output.xlsx');
+  showToast('Excel file downloaded!');
+});
+
+function showToast(msg, isError) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.background = isError ? 'var(--danger)' : 'var(--success)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
