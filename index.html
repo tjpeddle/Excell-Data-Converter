@@ -130,6 +130,13 @@
           <div class="selected-count" id="accomSelectedCount">0 selected</div>
         </div>
       </div>
+      <div style="margin-top:20px">
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Category Labels</label>
+        <div class="config-hint">Toggle whether category names (e.g. "Housing Accommodation:", "Academic Accommodation:") appear before each group of items</div>
+        <div class="chip-row" style="margin-top:8px">
+          <span class="chip active" id="toggleCatLabels" style="cursor:pointer">Show Category Labels</span>
+        </div>
+      </div>
       <button class="btn-primary" id="consolidateBtn" disabled>Consolidate Rows</button>
     </div>
   </div>
@@ -318,6 +325,8 @@ $('accomSearch').addEventListener('input',function(){
 $('accomSelAll').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=true;updateAccomCount();});
 $('accomSelNone').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=false;updateAccomCount();});
 
+$('toggleCatLabels').addEventListener('click',function(){this.classList.toggle('active');this.textContent=this.classList.contains('active')?'Show Category Labels':'Hide Category Labels';if(combinedData.length)renderPreview();});
+
 // CONSOLIDATE
 $('consolidateBtn').addEventListener('click',function(){try{doConsolidate();}catch(err){alert('Error: '+err.message);console.error(err);}});
 
@@ -374,15 +383,18 @@ function doConsolidate(){
     }
 
     // Build display text: "Housing Accommodation: Door Fob; Single Room | Academic: 1.5x Time"
-    var textParts=[];
+    var textPartsWithCat=[];
+    var textPartsNoCat=[];
     for(var j=0;j<catOrder.length;j++){
-      textParts.push(catOrder[j]+': '+byCat[catOrder[j]].join('; '));
+      textPartsWithCat.push(catOrder[j]+': '+byCat[catOrder[j]].join('; '));
+      textPartsNoCat.push(byCat[catOrder[j]].join('; '));
     }
 
     combinedData.push({
       groupVal:key,
       extras:g.extras,
-      accomText:textParts.join(' | '),
+      accomText:textPartsWithCat.join(' | '),
+      accomTextNoCat:textPartsNoCat.join(' | '),
       byCat:byCat,
       catOrder:catOrder
     });
@@ -414,9 +426,11 @@ function renderPreview(){
 
     var tdA=document.createElement('td');tdA.style.lineHeight='1.6';tdA.style.minWidth='300px';
     var html='';
+    var showCat=$('toggleCatLabels').classList.contains('active');
     for(var j=0;j<row.catOrder.length;j++){
       var cat=row.catOrder[j],items=row.byCat[cat];
-      html+='<div class="cat-group"><span class="cat-label">'+esc(cat)+':</span> ';
+      html+='<div class="cat-group">';
+      if(showCat)html+='<span class="cat-label">'+esc(cat)+':</span> ';
       for(var k=0;k<items.length;k++)html+='<span class="accom-tag">'+esc(items[k])+'</span> ';
       html+='</div>';
     }
@@ -440,7 +454,7 @@ $('exportBtn').addEventListener('click',function(){
     for(var i=0;i<combinedData.length;i++){
       var r=combinedData[i],row=[r.groupVal];
       for(var j=0;j<combinedOtherHeaders.length;j++)row.push(r.extras[combinedOtherHeaders[j]]||'');
-      row.push(r.accomText);
+      row.push($('toggleCatLabels').classList.contains('active')?r.accomText:r.accomTextNoCat);
       wsData.push(row);
     }
     var ws=XLSX.utils.aoa_to_sheet(wsData);
