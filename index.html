@@ -382,10 +382,17 @@ function buildAccomText(r,visibleCats){
   var parts=[];
   for(var j=0;j<r.catOrder.length;j++){
     var cat=r.catOrder[j],items=r.byCat[cat];
+    // Filter out items that are just the category name repeated (no-slash entries)
+    var filtered=[];
+    for(var k=0;k<items.length;k++){
+      if(!visibleCats[cat]&&items[k]===cat)continue;
+      filtered.push(items[k]);
+    }
+    if(filtered.length===0)continue;
     if(visibleCats[cat]){
-      parts.push(cat+': '+items.join('; '));
+      parts.push(cat+': '+filtered.join('; '));
     }else{
-      parts.push(items.join('; '));
+      parts.push(filtered.join('; '));
     }
   }
   return parts.join(' | ');
@@ -486,7 +493,11 @@ function renderPreview(){
       var cat=row.catOrder[j],items=row.byCat[cat];
       html+='<div class="cat-group">';
       if(visibleCats[cat])html+='<span class="cat-label">'+esc(cat)+':</span> ';
-      for(var k=0;k<items.length;k++)html+='<span class="accom-tag">'+esc(items[k])+'</span> ';
+      for(var k=0;k<items.length;k++){
+        // If label is hidden and the detail is the same as the category (no slash), skip it
+        if(!visibleCats[cat]&&items[k]===cat)continue;
+        html+='<span class="accom-tag">'+esc(items[k])+'</span> ';
+      }
       html+='</div>';
     }
     tdA.innerHTML=html;
