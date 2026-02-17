@@ -131,17 +131,12 @@
         </div>
       </div>
       <div style="margin-top:20px">
-        <label style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Category Labels to Show</label>
-        <div class="config-hint">Uncheck a category to hide its label in the output. E.g. uncheck "Room Type" so "Room Type/Single Room" just shows as "Single Room"</div>
-        <div class="filter-box hidden" id="catLabelFilterBox">
-          <div class="filter-box-actions">
-            <input type="text" class="filter-search" id="catLabelSearch" placeholder="Search categories...">
-            <button class="btn-xs" id="catLabelSelAll">All</button>
-            <button class="btn-xs" id="catLabelSelNone">None</button>
-          </div>
-          <div id="catLabelList"></div>
-          <div class="selected-count" id="catLabelSelectedCount">0 selected</div>
-        </div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Words / Phrases to Remove from Output</label>
+        <div class="config-hint">These exact phrases will be stripped from the combined accommodations text in both the preview and export. One per line.</div>
+        <textarea id="removeWords" style="width:100%;font-family:inherit;font-size:13px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);margin-top:8px;min-height:100px;resize:vertical" placeholder="Room Type&#10;Animals on Campus&#10;Kitchen Access&#10;Accessible Bathroom">Room Type
+Animals on Campus
+Kitchen Access
+Accessible Bathroom</textarea>
       </div>
       <button class="btn-primary" id="consolidateBtn" disabled>Consolidate Rows</button>
     </div>
@@ -315,7 +310,6 @@ function buildAccomList(){
   $('accomFilterBox').classList.remove('hidden');
   updateAccomCount();
   $('consolidateBtn').disabled=(keys.length===0);
-  buildCatLabelList();
 }
 
 function updateAccomCount(){
@@ -332,70 +326,41 @@ $('accomSearch').addEventListener('input',function(){
 $('accomSelAll').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=true;updateAccomCount();});
 $('accomSelNone').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=false;updateAccomCount();});
 
-function buildCatLabelList(){
-  var ai=parseInt($('selAccom').value),acol=headers[ai];
-  var rows=getFilteredRows();
-  var cats={};
-  for(var i=0;i<rows.length;i++){
-    var v=String(rows[i][acol]).trim();if(v==='')continue;
-    var slashIdx=v.indexOf('/');
-    var cat=slashIdx>0?v.substring(0,slashIdx).trim():v;
-    if(!cats[cat])cats[cat]=0;cats[cat]++;
+function getRemoveWords(){
+  var text=$('removeWords').value;
+  var lines=text.split('\n');
+  var words=[];
+  for(var i=0;i<lines.length;i++){
+    var w=lines[i].trim();
+    if(w.length>0)words.push(w);
   }
-  var keys=Object.keys(cats).sort();
-  $('catLabelList').innerHTML='';
-  for(var i=0;i<keys.length;i++){
-    var v=keys[i];
-    var lbl=document.createElement('label');lbl.className='filter-item cat-label-filter-item';
-    var cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.className='catLabelCb';cb.setAttribute('data-val',v);
-    cb.addEventListener('change',updateCatLabelCount);
-    var sp=document.createElement('span');sp.className='filter-label';sp.textContent=v;
-    var cnt=document.createElement('span');cnt.className='filter-count';cnt.textContent=String(cats[v]);
-    lbl.appendChild(cb);lbl.appendChild(sp);lbl.appendChild(cnt);
-    $('catLabelList').appendChild(lbl);
-  }
-  $('catLabelFilterBox').classList.remove('hidden');
-  updateCatLabelCount();
+  return words;
 }
 
-function updateCatLabelCount(){
-  var a=$('catLabelList').querySelectorAll('.catLabelCb'),c=$('catLabelList').querySelectorAll('.catLabelCb:checked');
-  $('catLabelSelectedCount').textContent=c.length+' of '+a.length+' labels shown';
-}
-
-function getVisibleCatLabels(){
-  var visible={};
-  var cbs=$('catLabelList').querySelectorAll('.catLabelCb:checked');
-  for(var i=0;i<cbs.length;i++)visible[cbs[i].getAttribute('data-val')]=true;
-  return visible;
-}
-
-$('catLabelSearch').addEventListener('input',function(){
-  var q=$('catLabelSearch').value.toLowerCase();
-  var items=$('catLabelList').querySelectorAll('.cat-label-filter-item');
-  for(var i=0;i<items.length;i++){var t=items[i].querySelector('.filter-label').textContent.toLowerCase();items[i].style.display=t.indexOf(q)>=0?'':'none';}
-});
-$('catLabelSelAll').addEventListener('click',function(){var c=$('catLabelList').querySelectorAll('.catLabelCb');for(var i=0;i<c.length;i++)c[i].checked=true;updateCatLabelCount();});
-$('catLabelSelNone').addEventListener('click',function(){var c=$('catLabelList').querySelectorAll('.catLabelCb');for(var i=0;i<c.length;i++)c[i].checked=false;updateCatLabelCount();});
-
-function buildAccomText(r,visibleCats){
-  var parts=[];
-  for(var j=0;j<r.catOrder.length;j++){
-    var cat=r.catOrder[j],items=r.byCat[cat];
-    // Filter out items that are just the category name repeated (no-slash entries)
-    var filtered=[];
-    for(var k=0;k<items.length;k++){
-      if(!visibleCats[cat]&&items[k]===cat)continue;
-      filtered.push(items[k]);
-    }
-    if(filtered.length===0)continue;
-    if(visibleCats[cat]){
-      parts.push(cat+': '+filtered.join('; '));
-    }else{
-      parts.push(filtered.join('; '));
-    }
+function cleanText(text){
+  var words=getRemoveWords();
+  for(var i=0;i<words.length;i++){
+    // Remove the word followed by optional separator patterns like / ; , or standalone
+    // Build a regex that matches the word with optional surrounding separators
+    var w=words[i].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); // escape regex chars
+    // Remove "Word/" at start of a segment
+    text=text.replace(new RegExp(w+'\\s*/\\s*','gi'),'');
+    // Remove "/Word" at end of a segment  
+    text=text.replace(new RegExp('\\s*/\\s*'+w,'gi'),'');
+    // Remove "Word; " or "; Word" within semicolon lists
+    text=text.replace(new RegExp(w+'\\s*;\\s*','gi'),'');
+    text=text.replace(new RegExp(';\\s*'+w,'gi'),'');
+    // Remove standalone word
+    text=text.replace(new RegExp('\\b'+w+'\\b','gi'),'');
   }
-  return parts.join(' | ');
+  // Clean up leftover separators and whitespace
+  text=text.replace(/;\s*;/g,';');
+  text=text.replace(/\|\s*\|/g,'|');
+  text=text.replace(/^\s*[;|,]\s*/,'');
+  text=text.replace(/\s*[;|,]\s*$/,'');
+  text=text.replace(/\s{2,}/g,' ');
+  text=text.trim();
+  return text;
 }
 
 // CONSOLIDATE
@@ -488,15 +453,19 @@ function renderPreview(){
 
     var tdA=document.createElement('td');tdA.style.lineHeight='1.6';tdA.style.minWidth='300px';
     var html='';
-    var visibleCats=getVisibleCatLabels();
     for(var j=0;j<row.catOrder.length;j++){
       var cat=row.catOrder[j],items=row.byCat[cat];
-      html+='<div class="cat-group">';
-      if(visibleCats[cat])html+='<span class="cat-label">'+esc(cat)+':</span> ';
+      var cleanCat=cleanText(cat);
+      var cleanItems=[];
       for(var k=0;k<items.length;k++){
-        // If label is hidden and the detail is the same as the category (no slash), skip it
-        if(!visibleCats[cat]&&items[k]===cat)continue;
-        html+='<span class="accom-tag">'+esc(items[k])+'</span> ';
+        var ci=cleanText(items[k]);
+        if(ci.length>0)cleanItems.push(ci);
+      }
+      if(cleanCat.length===0&&cleanItems.length===0)continue;
+      html+='<div class="cat-group">';
+      if(cleanCat.length>0)html+='<span class="cat-label">'+esc(cleanCat)+':</span> ';
+      for(var k=0;k<cleanItems.length;k++){
+        html+='<span class="accom-tag">'+esc(cleanItems[k])+'</span> ';
       }
       html+='</div>';
     }
@@ -520,8 +489,18 @@ $('exportBtn').addEventListener('click',function(){
     for(var i=0;i<combinedData.length;i++){
       var r=combinedData[i],row=[r.groupVal];
       for(var j=0;j<combinedOtherHeaders.length;j++)row.push(r.extras[combinedOtherHeaders[j]]||'');
-      var visibleCats=getVisibleCatLabels();
-      row.push(buildAccomText(r,visibleCats));
+      // Build text and clean it
+      var parts=[];
+      for(var c=0;c<r.catOrder.length;c++){
+        var cat=r.catOrder[c],items=r.byCat[cat];
+        var cleanCat=cleanText(cat);
+        var cleanItems=[];
+        for(var k=0;k<items.length;k++){var ci=cleanText(items[k]);if(ci.length>0)cleanItems.push(ci);}
+        if(cleanCat.length===0&&cleanItems.length===0)continue;
+        if(cleanCat.length>0&&cleanItems.length>0){parts.push(cleanCat+': '+cleanItems.join('; '));}
+        else if(cleanItems.length>0){parts.push(cleanItems.join('; '));}
+      }
+      row.push(parts.join(' | '));
       wsData.push(row);
     }
     var ws=XLSX.utils.aoa_to_sheet(wsData);
