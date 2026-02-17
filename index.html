@@ -279,14 +279,22 @@ function buildChips(){
 }
 
 function getFilteredRows(){
+  var gi=parseInt($('selGroup').value),gcol=headers[gi];
   var fi=parseInt($('selFilter').value);
-  if(fi<0)return rawData.slice();
+  var base=[];
+  // Skip rows where the Group By (name/ID) column is blank
+  for(var i=0;i<rawData.length;i++){
+    var gv=String(rawData[i][gcol]).trim();
+    if(gv===''||gv==='undefined'||gv==='null')continue;
+    base.push(rawData[i]);
+  }
+  if(fi<0)return base;
   var col=headers[fi],sv={};
   var cbs=$('filterValArea').querySelectorAll('.filterValCb:checked');
   for(var i=0;i<cbs.length;i++)sv[cbs[i].getAttribute('data-val')]=true;
-  if(Object.keys(sv).length===0)return rawData.slice();
+  if(Object.keys(sv).length===0)return base;
   var out=[];
-  for(var i=0;i<rawData.length;i++){var v=String(rawData[i][col]).trim();if(v==='')v='(blank)';if(sv[v])out.push(rawData[i]);}
+  for(var i=0;i<base.length;i++){var v=String(base[i][col]).trim();if(v==='')v='(blank)';if(sv[v])out.push(base[i]);}
   return out;
 }
 
