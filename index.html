@@ -131,10 +131,16 @@
         </div>
       </div>
       <div style="margin-top:20px">
-        <label style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Category Labels</label>
-        <div class="config-hint">Toggle whether category names (e.g. "Housing Accommodation:", "Academic Accommodation:") appear before each group of items</div>
-        <div class="chip-row" style="margin-top:8px">
-          <span class="chip active" id="toggleCatLabels" style="cursor:pointer">Show Category Labels</span>
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Category Labels to Show</label>
+        <div class="config-hint">Uncheck a category to hide its label in the output. E.g. uncheck "Room Type" so "Room Type/Single Room" just shows as "Single Room"</div>
+        <div class="filter-box hidden" id="catLabelFilterBox">
+          <div class="filter-box-actions">
+            <input type="text" class="filter-search" id="catLabelSearch" placeholder="Search categories...">
+            <button class="btn-xs" id="catLabelSelAll">All</button>
+            <button class="btn-xs" id="catLabelSelNone">None</button>
+          </div>
+          <div id="catLabelList"></div>
+          <div class="selected-count" id="catLabelSelectedCount">0 selected</div>
         </div>
       </div>
       <button class="btn-primary" id="consolidateBtn" disabled>Consolidate Rows</button>
@@ -309,6 +315,7 @@ function buildAccomList(){
   $('accomFilterBox').classList.remove('hidden');
   updateAccomCount();
   $('consolidateBtn').disabled=(keys.length===0);
+  buildCatLabelList();
 }
 
 function updateAccomCount(){
@@ -325,7 +332,64 @@ $('accomSearch').addEventListener('input',function(){
 $('accomSelAll').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=true;updateAccomCount();});
 $('accomSelNone').addEventListener('click',function(){var c=$('accomList').querySelectorAll('.accomCb');for(var i=0;i<c.length;i++)c[i].checked=false;updateAccomCount();});
 
-$('toggleCatLabels').addEventListener('click',function(){this.classList.toggle('active');this.textContent=this.classList.contains('active')?'Show Category Labels':'Hide Category Labels';if(combinedData.length)renderPreview();});
+function buildCatLabelList(){
+  var ai=parseInt($('selAccom').value),acol=headers[ai];
+  var rows=getFilteredRows();
+  var cats={};
+  for(var i=0;i<rows.length;i++){
+    var v=String(rows[i][acol]).trim();if(v==='')continue;
+    var slashIdx=v.indexOf('/');
+    var cat=slashIdx>0?v.substring(0,slashIdx).trim():v;
+    if(!cats[cat])cats[cat]=0;cats[cat]++;
+  }
+  var keys=Object.keys(cats).sort();
+  $('catLabelList').innerHTML='';
+  for(var i=0;i<keys.length;i++){
+    var v=keys[i];
+    var lbl=document.createElement('label');lbl.className='filter-item cat-label-filter-item';
+    var cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.className='catLabelCb';cb.setAttribute('data-val',v);
+    cb.addEventListener('change',updateCatLabelCount);
+    var sp=document.createElement('span');sp.className='filter-label';sp.textContent=v;
+    var cnt=document.createElement('span');cnt.className='filter-count';cnt.textContent=String(cats[v]);
+    lbl.appendChild(cb);lbl.appendChild(sp);lbl.appendChild(cnt);
+    $('catLabelList').appendChild(lbl);
+  }
+  $('catLabelFilterBox').classList.remove('hidden');
+  updateCatLabelCount();
+}
+
+function updateCatLabelCount(){
+  var a=$('catLabelList').querySelectorAll('.catLabelCb'),c=$('catLabelList').querySelectorAll('.catLabelCb:checked');
+  $('catLabelSelectedCount').textContent=c.length+' of '+a.length+' labels shown';
+}
+
+function getVisibleCatLabels(){
+  var visible={};
+  var cbs=$('catLabelList').querySelectorAll('.catLabelCb:checked');
+  for(var i=0;i<cbs.length;i++)visible[cbs[i].getAttribute('data-val')]=true;
+  return visible;
+}
+
+$('catLabelSearch').addEventListener('input',function(){
+  var q=$('catLabelSearch').value.toLowerCase();
+  var items=$('catLabelList').querySelectorAll('.cat-label-filter-item');
+  for(var i=0;i<items.length;i++){var t=items[i].querySelector('.filter-label').textContent.toLowerCase();items[i].style.display=t.indexOf(q)>=0?'':'none';}
+});
+$('catLabelSelAll').addEventListener('click',function(){var c=$('catLabelList').querySelectorAll('.catLabelCb');for(var i=0;i<c.length;i++)c[i].checked=true;updateCatLabelCount();});
+$('catLabelSelNone').addEventListener('click',function(){var c=$('catLabelList').querySelectorAll('.catLabelCb');for(var i=0;i<c.length;i++)c[i].checked=false;updateCatLabelCount();});
+
+function buildAccomText(r,visibleCats){
+  var parts=[];
+  for(var j=0;j<r.catOrder.length;j++){
+    var cat=r.catOrder[j],items=r.byCat[cat];
+    if(visibleCats[cat]){
+      parts.push(cat+': '+items.join('; '));
+    }else{
+      parts.push(items.join('; '));
+    }
+  }
+  return parts.join(' | ');
+}
 
 // CONSOLIDATE
 $('consolidateBtn').addEventListener('click',function(){try{doConsolidate();}catch(err){alert('Error: '+err.message);console.error(err);}});
@@ -383,18 +447,9 @@ function doConsolidate(){
     }
 
     // Build display text: "Housing Accommodation: Door Fob; Single Room | Academic: 1.5x Time"
-    var textPartsWithCat=[];
-    var textPartsNoCat=[];
-    for(var j=0;j<catOrder.length;j++){
-      textPartsWithCat.push(catOrder[j]+': '+byCat[catOrder[j]].join('; '));
-      textPartsNoCat.push(byCat[catOrder[j]].join('; '));
-    }
-
     combinedData.push({
       groupVal:key,
       extras:g.extras,
-      accomText:textPartsWithCat.join(' | '),
-      accomTextNoCat:textPartsNoCat.join(' | '),
       byCat:byCat,
       catOrder:catOrder
     });
@@ -426,11 +481,11 @@ function renderPreview(){
 
     var tdA=document.createElement('td');tdA.style.lineHeight='1.6';tdA.style.minWidth='300px';
     var html='';
-    var showCat=$('toggleCatLabels').classList.contains('active');
+    var visibleCats=getVisibleCatLabels();
     for(var j=0;j<row.catOrder.length;j++){
       var cat=row.catOrder[j],items=row.byCat[cat];
       html+='<div class="cat-group">';
-      if(showCat)html+='<span class="cat-label">'+esc(cat)+':</span> ';
+      if(visibleCats[cat])html+='<span class="cat-label">'+esc(cat)+':</span> ';
       for(var k=0;k<items.length;k++)html+='<span class="accom-tag">'+esc(items[k])+'</span> ';
       html+='</div>';
     }
@@ -454,7 +509,8 @@ $('exportBtn').addEventListener('click',function(){
     for(var i=0;i<combinedData.length;i++){
       var r=combinedData[i],row=[r.groupVal];
       for(var j=0;j<combinedOtherHeaders.length;j++)row.push(r.extras[combinedOtherHeaders[j]]||'');
-      row.push($('toggleCatLabels').classList.contains('active')?r.accomText:r.accomTextNoCat);
+      var visibleCats=getVisibleCatLabels();
+      row.push(buildAccomText(r,visibleCats));
       wsData.push(row);
     }
     var ws=XLSX.utils.aoa_to_sheet(wsData);
